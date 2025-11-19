@@ -15,13 +15,14 @@ st.set_page_config(
 
 @st.cache_data
 def load_data():
-    matches = pd.read_excel("matches (2).xlsx")  # FIXED: correct file name
+    matches = pd.read_csv("matches (2).csv")  # FIXED
     matches.columns = matches.columns.str.strip().str.lower().str.replace(" ", "_")
 
     deliveries = pd.read_csv("deliveries.csv")
     deliveries.columns = deliveries.columns.str.strip().str.lower().str.replace(" ", "_")
 
     return matches, deliveries
+
 
 
 
