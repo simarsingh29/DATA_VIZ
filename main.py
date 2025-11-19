@@ -47,7 +47,7 @@ teams = sorted(
         pd.concat(
             [
                 
-                matches["winner"]
+               
             ],
             axis=0
         ).dropna()
