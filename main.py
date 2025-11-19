@@ -22,6 +22,9 @@ def load_data():
     deliveries.columns = deliveries.columns.str.strip().str.lower().str.replace(" ", "_")
 
     return matches, deliveries
+st.write("Matches shape:", matches.shape)
+st.write("Columns:", matches.columns.tolist())
+st.write(matches.head())
 
 
 
