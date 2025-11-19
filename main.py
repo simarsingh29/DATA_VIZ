@@ -15,20 +15,14 @@ st.set_page_config(
 
 @st.cache_data
 def load_data():
-    # Load matches correctly
-    matches = pd.read_excel("matches (2).xls")
-
-    # Normalize column names to lowercase and underscore
-    matches.columns = (
-        matches.columns.str.strip().str.lower().str.replace(" ", "_")
-    )
+    matches = pd.read_excel("matches (2).xlsx")  # FIXED: correct file name
+    matches.columns = matches.columns.str.strip().str.lower().str.replace(" ", "_")
 
     deliveries = pd.read_csv("deliveries.csv")
-    deliveries.columns = (
-        deliveries.columns.str.strip().str.lower().str.replace(" ", "_")
-    )
+    deliveries.columns = deliveries.columns.str.strip().str.lower().str.replace(" ", "_")
 
     return matches, deliveries
+
 
 
 matches, deliveries = load_data()
