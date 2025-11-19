@@ -15,14 +15,14 @@ st.set_page_config(
 
 @st.cache_data
 def load_data():
-    matches = pd.read_csv("data/matches.csv")  
-    deliveries = pd.read_csv("data/deliveries.csv")
-
-    # Clean column names
+    matches = pd.read_csv("matches (2).csv")  # FIXED
     matches.columns = matches.columns.str.strip().str.lower().str.replace(" ", "_")
+
+    deliveries = pd.read_csv("deliveries.csv")
     deliveries.columns = deliveries.columns.str.strip().str.lower().str.replace(" ", "_")
 
     return matches, deliveries
+
 
 matches, deliveries = load_data()
 
