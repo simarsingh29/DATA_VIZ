@@ -27,6 +27,9 @@ def load_data():
         matches = pd.read_csv("matches (2).csv")
     except:
         matches = pd.read_csv("matches (2).csv", header=None)
+    st.write("MATCHES COLUMNS RAW →", matches.columns)
+    st.write(matches.head())
+    st.stop()
 
     # Fix: If only ONE column exists → it's a corrupted CSV, split it manually
     if matches.shape[1] == 1:
