@@ -7,188 +7,469 @@ import streamlit as st
 import plotly.express as px
 import plotly.graph_objects as go
 
-# ----------------------------------------------------
-# STREAMLIT CONFIG
-# ----------------------------------------------------
 st.set_page_config(
     page_title="IPL Analytics Dashboard",
     page_icon="🏏",
     layout="wide"
 )
 
-# ----------------------------------------------------
-# LOAD DATA
-# ----------------------------------------------------
 @st.cache_data
 def load_data():
-    # Correct filenames from your GitHub repo
     matches = pd.read_csv("matches (2).csv")
     deliveries = pd.read_csv("deliveries.csv")
-
-    # Clean column names
-    matches.columns = matches.columns.str.strip().str.lower().str.replace(" ", "_")
-    deliveries.columns = deliveries.columns.str.strip().str.lower().str.replace(" ", "_")
-
-    # Fix common inconsistencies
-    rename_map = {
-        "match_winner": "winner",
-        "team_1": "team1",
-        "team_2": "team2"
-    }
-    matches.rename(columns={k: v for k, v in rename_map.items() if k in matches.columns}, inplace=True)
-
-    # Ensure date column is properly parsed
-    if "date" in matches.columns:
-        matches["date"] = pd.to_datetime(matches["date"], errors="ignore")
-
     return matches, deliveries
-
 
 matches, deliveries = load_data()
 
-# ----------------------------------------------------
-# VALIDATION
-# ----------------------------------------------------
-required_match_cols = {"team1", "team2", "winner", "season", "id"}
-if not required_match_cols.issubset(matches.columns):
-    st.error("❌ Required columns missing in matches CSV")
-    st.write("Columns available:", matches.columns.tolist())
-    st.stop()
+if "date" in matches.columns:
+    matches["date"] = pd.to_datetime(matches["date"])
 
-if "match_id" not in deliveries.columns:
-    st.error("❌ Column 'match_id' missing in deliveries.csv")
-    st.write("Available columns:", deliveries.columns.tolist())
-    st.stop()
-
-# ----------------------------------------------------
-# TITLE
-# ----------------------------------------------------
 st.title("🏏 IPL Analytics Dashboard")
-st.markdown("""
-Explore IPL matches, teams, players, and venue statistics using interactive visual analytics.
-""")
 
-# ----------------------------------------------------
-# SIDEBAR FILTERS
-# ----------------------------------------------------
+st.markdown(
+    """
+Interactive dashboard using IPL match and ball-by-ball data.  
+Use the sidebar filters and tabs to explore teams, players, venues and seasons.
+"""
+)
+
 st.sidebar.header("Filters")
 
-# Seasons
-seasons = sorted(matches["season"].dropna().unique())
-selected_seasons = st.sidebar.multiselect("Select Seasons", seasons, default=seasons)
+seasons = sorted(matches["season"].dropna().unique()) if "season" in matches.columns else []
+selected_seasons = st.sidebar.multiselect(
+    "Select Seasons",
+    options=seasons,
+    default=seasons
+)
 
-# Filter matches season-wise
-matches_f = matches[matches["season"].isin(selected_seasons)]
+teams = sorted(
+    pd.unique(
+        pd.concat(
+            [
+                matches["team1"],
+                matches["team2"],
+                matches["winner"]
+            ],
+            axis=0
+        ).dropna()
+    )
+)
 
-# Teams
-teams = sorted(pd.unique(pd.concat([matches["team1"], matches["team2"], matches["winner"]]).dropna()))
-selected_team = st.sidebar.selectbox("Select Team (optional)", ["All"] + teams)
+selected_team = st.sidebar.selectbox(
+    "Focus Team (optional)",
+    options=["All"] + teams,
+    index=0
+)
 
-# Filter deliveries based on filtered matches
+if selected_seasons:
+    matches_f = matches[matches["season"].isin(selected_seasons)]
+else:
+    matches_f = matches.copy()
+
 deliveries_f = deliveries[deliveries["match_id"].isin(matches_f["id"])]
 
-# ----------------------------------------------------
-# TABS
-# ----------------------------------------------------
-tab1, tab2, tab3, tab4 = st.tabs(["Overview", "Team Analysis", "Batting", "Bowling"])
+tab1, tab2, tab3, tab4 = st.tabs(
+    ["Overview", "Team Analysis", "Batting Analysis", "Bowling Analysis"]
+)
 
-# ----------------------------------------------------
-# TAB 1 — OVERVIEW
-# ----------------------------------------------------
+# =========================
+# TAB 1: OVERVIEW
+# =========================
 with tab1:
-    st.subheader("📊 Tournament Overview")
+    st.subheader("Overall Tournament Overview")
 
     col1, col2, col3, col4 = st.columns(4)
-    col1.metric("Total Matches", len(matches_f))
-    col2.metric("Total Seasons", matches_f["season"].nunique())
-    col3.metric("Venues Used", matches_f["venue"].nunique() if "venue" in matches.columns else "--")
-    col4.metric("Total Teams", len(teams))
+    total_matches = len(matches_f)
+    total_seasons = matches_f["season"].nunique() if "season" in matches_f.columns else 0
+    total_venues = matches_f["venue"].nunique() if "venue" in matches_f.columns else 0
+    total_teams = len(teams)
 
-    # Matches per season chart
-    mps = matches_f.groupby("season")["id"].count().reset_index()
+    col1.metric("Total Matches", total_matches)
+    col2.metric("Seasons", total_seasons)
+    col3.metric("Venues", total_venues)
+    col4.metric("Teams", total_teams)
 
-    fig = px.bar(
-        mps,
-        x="season",
-        y="id",
-        title="Matches Played Each Season",
-        color="id",
-        labels={"id": "Matches"},
-        height=400
-    )
-    st.plotly_chart(fig, use_container_width=True)
+    if "season" in matches_f.columns:
+        matches_per_season = (
+            matches_f.groupby("season")["id"]
+            .count()
+            .reset_index()
+            .rename(columns={"id": "matches"})
+        )
+        fig_mps = px.bar(
+            matches_per_season,
+            x="season",
+            y="matches",
+            title="Matches per Season",
+            text="matches"
+        )
+        fig_mps.update_traces(textposition="outside")
+        st.plotly_chart(fig_mps, use_container_width=True)
 
-# ----------------------------------------------------
-# TAB 2 — TEAM ANALYSIS
-# ----------------------------------------------------
+    if "toss_decision" in matches_f.columns:
+        toss_counts = matches_f["toss_decision"].value_counts().reset_index()
+        toss_counts.columns = ["toss_decision", "toss_count"]
+        toss_counts = toss_counts.rename(columns={"toss_decision": "decision"})
+
+        fig_toss = px.pie(
+            toss_counts,
+            names="decision",
+            values="toss_count",
+            title="Toss Decision (Bat vs Field)",
+            hole=0.4
+        )
+        st.plotly_chart(fig_toss, use_container_width=True)
+
+    if "result" in matches_f.columns:
+        result_counts = matches_f["result"].value_counts().reset_index()
+        result_counts.columns = ["result_type", "result_count"]
+
+        fig_res = px.bar(
+            result_counts,
+            x="result_type",
+            y="result_count",
+            title="Result Type Distribution",
+            text="result_count",
+            labels={"result_type": "Result", "result_count": "Count"}
+        )
+        fig_res.update_traces(textposition="outside")
+        st.plotly_chart(fig_res, use_container_width=True)
+
+    if "win_by_runs" in matches_f.columns and "win_by_wickets" in matches_f.columns:
+        col_a, col_b = st.columns(2)
+
+        with col_a:
+            runs_wins = matches_f[matches_f["win_by_runs"] > 0].copy()
+            fig_runs = px.histogram(
+                runs_wins,
+                x="win_by_runs",
+                nbins=30,
+                title="Distribution of Victory Margin (Runs)",
+                labels={"win_by_runs": "Run Margin"}
+            )
+            st.plotly_chart(fig_runs, use_container_width=True)
+
+        with col_b:
+            wk_wins = matches_f[matches_f["win_by_wickets"] > 0].copy()
+            fig_wk = px.histogram(
+                wk_wins,
+                x="win_by_wickets",
+                nbins=10,
+                title="Distribution of Victory Margin (Wickets)",
+                labels={"win_by_wickets": "Wicket Margin"}
+            )
+            st.plotly_chart(fig_wk, use_container_width=True)
+
+# =========================
+# TAB 2: TEAM ANALYSIS
+# =========================
 with tab2:
-    st.subheader("🏏 Team Analysis")
+    st.subheader("Team Performance Analysis")
+
+    if selected_team == "All":
+        st.markdown("Showing overall team comparison.")
+    else:
+        st.markdown(f"Showing statistics for {selected_team}.")
+
+    team_matches1 = (
+        matches_f.groupby("team1")["id"]
+        .count()
+        .reset_index()
+        .rename(columns={"team1": "team", "id": "matches_home"})
+    )
+    team_matches2 = (
+        matches_f.groupby("team2")["id"]
+        .count()
+        .reset_index()
+        .rename(columns={"team2": "team", "id": "matches_away"})
+    )
+    team_matches = pd.merge(team_matches1, team_matches2, on="team", how="outer").fillna(0)
+    team_matches["matches_played"] = team_matches["matches_home"] + team_matches["matches_away"]
+
+    team_wins = (
+        matches_f.groupby("winner")["id"]
+        .count()
+        .reset_index()
+        .rename(columns={"winner": "team", "id": "wins"})
+    )
+
+    team_stats = pd.merge(team_matches, team_wins, on="team", how="left").fillna(0)
+    team_stats["win_pct"] = np.where(
+        team_stats["matches_played"] > 0,
+        (team_stats["wins"] / team_stats["matches_played"]) * 100,
+        0
+    )
+    team_stats = team_stats.sort_values("wins", ascending=False)
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        fig_team_wins = px.bar(
+            team_stats,
+            x="team",
+            y="wins",
+            title="Total Wins by Team",
+            text="wins"
+        )
+        fig_team_wins.update_layout(xaxis_tickangle=-45)
+        fig_team_wins.update_traces(textposition="outside")
+        st.plotly_chart(fig_team_wins, use_container_width=True)
+
+    with col2:
+        fig_team_winpct = px.bar(
+            team_stats,
+            x="team",
+            y="win_pct",
+            title="Win Percentage by Team",
+            labels={"win_pct": "Win %"},
+            text="win_pct"
+        )
+        fig_team_winpct.update_layout(xaxis_tickangle=-45)
+        fig_team_winpct.update_traces(textposition="outside")
+        st.plotly_chart(fig_team_winpct, use_container_width=True)
 
     if selected_team != "All":
-        team_matches = matches_f[(matches_f["team1"] == selected_team) | (matches_f["team2"] == selected_team)]
+        tm_row = team_stats[team_stats["team"] == selected_team]
+        if not tm_row.empty:
+            total_played = int(tm_row["matches_played"].iloc[0])
+            total_won = int(tm_row["wins"].iloc[0])
+            win_pct_val = round(tm_row["win_pct"].iloc[0], 2)
 
-        wins = (team_matches["winner"] == selected_team).sum()
-        total = len(team_matches)
+            c1, c2, c3 = st.columns(3)
+            c1.metric("Matches Played", total_played)
+            c2.metric("Matches Won", total_won)
+            c3.metric("Win %", win_pct_val)
 
-        st.metric(f"{selected_team} — Win Percentage", f"{(wins/total)*100:.2f}%" if total > 0 else "N/A")
+    if "venue" in matches_f.columns:
+        st.markdown("### Top Venues by Matches Played")
 
-        win_df = team_matches.groupby("season").apply(lambda x: (x["winner"] == selected_team).sum()).reset_index(name="wins")
-
-        fig = px.line(
-            win_df,
-            x="season",
-            y="wins",
-            markers=True,
-            title=f"{selected_team} — Wins Per Season",
-            height=400
+        venue_match_count = (
+            matches_f.groupby("venue")["id"]
+            .count()
+            .reset_index()
+            .rename(columns={"id": "matches"})
+            .sort_values("matches", ascending=False)
         )
-        st.plotly_chart(fig, use_container_width=True)
-    else:
-        st.info("Select a team from the sidebar to view detailed team analysis.")
+        top_venues = venue_match_count.head(15)
 
-# ----------------------------------------------------
-# TAB 3 — BATTING ANALYSIS
-# ----------------------------------------------------
+        fig_venue = px.bar(
+            top_venues,
+            x="venue",
+            y="matches",
+            title="Most Used Venues",
+            text="matches"
+        )
+        fig_venue.update_layout(xaxis_tickangle=-60)
+        fig_venue.update_traces(textposition="outside")
+        st.plotly_chart(fig_venue, use_container_width=True)
+
+        venue_sel = st.selectbox(
+            "Select a Venue to see team performance there",
+            options=sorted(matches_f["venue"].dropna().unique())
+        )
+
+        venue_df = matches_f[matches_f["venue"] == venue_sel]
+        venue_team_wins = (
+            venue_df.groupby("winner")["id"]
+            .count()
+            .reset_index()
+            .rename(columns={"winner": "team", "id": "wins_at_venue"})
+            .sort_values("wins_at_venue", ascending=False)
+        )
+
+        fig_venue_team = px.bar(
+            venue_team_wins,
+            x="team",
+            y="wins_at_venue",
+            title=f"Wins by Team at {venue_sel}",
+            text="wins_at_venue"
+        )
+        fig_venue_team.update_layout(xaxis_tickangle=-45)
+        fig_venue_team.update_traces(textposition="outside")
+        st.plotly_chart(fig_venue_team, use_container_width=True)
+
+# =========================
+# TAB 3: BATTING ANALYSIS
+# =========================
 with tab3:
-    st.subheader("🏏 Batting Performance")
+    st.subheader("Batting Analysis")
 
-    if "batsman" in deliveries.columns:
-        batsman_runs = deliveries_f.groupby("batsman")["batsman_runs"].sum().sort_values(ascending=False).head(20)
-
-        fig = px.bar(
-            batsman_runs,
-            x=batsman_runs.values,
-            y=batsman_runs.index,
-            orientation="h",
-            title="Top 20 Run Scorers",
-            labels={"x": "Runs", "y": "Batsman"},
-            height=500
+    if {"batter", "batsman_runs"}.issubset(deliveries_f.columns):
+        batter_runs = (
+            deliveries_f.groupby("batter")["batsman_runs"]
+            .sum()
+            .reset_index()
+            .sort_values("batsman_runs", ascending=False)
         )
-        st.plotly_chart(fig, use_container_width=True)
-    else:
-        st.error("Batsman column missing from deliveries data.")
 
-# ----------------------------------------------------
-# TAB 4 — BOWLING ANALYSIS
-# ----------------------------------------------------
+        top_n_bat = st.slider("Top N batters by runs", 5, 30, 10)
+        top_batters = batter_runs.head(top_n_bat)
+
+        top_batters = top_batters.rename(columns={"batsman_runs": "total_runs"})
+
+        fig_top_bat = px.bar(
+            top_batters,
+            x="batter",
+            y="total_runs",
+            title=f"Top {top_n_bat} Run Scorers",
+            labels={"batter": "Batter", "total_runs": "Runs"},
+            text="total_runs"
+        )
+        fig_top_bat.update_layout(xaxis_tickangle=-45)
+        fig_top_bat.update_traces(textposition="outside")
+        st.plotly_chart(fig_top_bat, use_container_width=True)
+
+        selected_batter = st.selectbox(
+            "Select a batter for detailed view",
+            options=top_batters["batter"]
+        )
+
+        p_df = deliveries_f[deliveries_f["batter"] == selected_batter]
+
+        total_runs = int(p_df["batsman_runs"].sum())
+        total_balls = int(p_df.shape[0])
+        fours = int((p_df["batsman_runs"] == 4).sum())
+        sixes = int((p_df["batsman_runs"] == 6).sum())
+        strike_rate = round((total_runs / total_balls) * 100, 2) if total_balls > 0 else 0
+
+        c1, c2, c3, c4, c5 = st.columns(5)
+        c1.metric("Runs", total_runs)
+        c2.metric("Balls", total_balls)
+        c3.metric("4s", fours)
+        c4.metric("6s", sixes)
+        c5.metric("Strike Rate", strike_rate)
+
+        if "season" in matches_f.columns:
+            bat_season = deliveries_f.merge(
+                matches_f[["id", "season"]],
+                left_on="match_id",
+                right_on="id",
+                how="left"
+            )
+            bat_season = bat_season[bat_season["batter"] == selected_batter]
+            bat_season_grp = (
+                bat_season.groupby("season")["batsman_runs"]
+                .sum()
+                .reset_index()
+                .sort_values("season")
+            )
+            bat_season_grp = bat_season_grp.rename(columns={"batsman_runs": "season_runs"})
+
+            fig_season_runs = px.line(
+                bat_season_grp,
+                x="season",
+                y="season_runs",
+                markers=True,
+                title=f"Season-wise Runs: {selected_batter}",
+                labels={"season_runs": "Runs"}
+            )
+            st.plotly_chart(fig_season_runs, use_container_width=True)
+
+        st.markdown("### Boundary Distribution")
+        boundary_counts = pd.DataFrame({
+            "boundary_type": ["4s", "6s"],
+            "boundary_count": [fours, sixes]
+        })
+        fig_boundary = px.pie(
+            boundary_counts,
+            names="boundary_type",
+            values="boundary_count",
+            title=f"Boundary Split for {selected_batter}",
+            hole=0.4
+        )
+        st.plotly_chart(fig_boundary, use_container_width=True)
+    else:
+        st.write("Required columns for batting analysis are missing in deliveries dataset.")
+
+# =========================
+# TAB 4: BOWLING ANALYSIS
+# =========================
 with tab4:
-    st.subheader("🔥 Bowling Impact Analysis")
+    st.subheader("Bowling Analysis")
 
-    if {"bowler", "is_wicket"} <= set(deliveries.columns):
-        wickets = deliveries_f[deliveries_f["is_wicket"] == 1]
+    needed_cols = {"bowler", "is_wicket", "dismissal_kind", "total_runs"}
+    if needed_cols.issubset(deliveries_f.columns):
+        wicket_df = deliveries_f[
+            (deliveries_f["is_wicket"] == 1) &
+            (~deliveries_f["dismissal_kind"].isin(["run out", "retired hurt", "obstructing the field"]))
+        ]
 
-        bowler_wkts = wickets.groupby("bowler")["is_wicket"].count().sort_values(ascending=False).head(20)
-
-        fig = px.bar(
-            bowler_wkts,
-            x=bowler_wkts.values,
-            y=bowler_wkts.index,
-            orientation="h",
-            title="Top 20 Wicket Takers",
-            labels={"x": "Wickets", "y": "Bowler"},
-            height=500
+        bowler_wk = (
+            wicket_df.groupby("bowler")["is_wicket"]
+            .count()
+            .reset_index()
+            .rename(columns={"is_wicket": "wickets_taken"})
+            .sort_values("wickets_taken", ascending=False)
         )
-        st.plotly_chart(fig, use_container_width=True)
 
+        top_n_bowl = st.slider("Top N bowlers by wickets", 5, 30, 10)
+        top_bowlers = bowler_wk.head(top_n_bowl)
+
+        fig_top_bowl = px.bar(
+            top_bowlers,
+            x="bowler",
+            y="wickets_taken",
+            title=f"Top {top_n_bowl} Wicket Takers",
+            labels={"bowler": "Bowler", "wickets_taken": "Wickets"},
+            text="wickets_taken"
+        )
+        fig_top_bowl.update_layout(xaxis_tickangle=-45)
+        fig_top_bowl.update_traces(textposition="outside")
+        st.plotly_chart(fig_top_bowl, use_container_width=True)
+
+        selected_bowler = st.selectbox(
+            "Select a bowler for detailed view",
+            options=top_bowlers["bowler"]
+        )
+
+        b_df = deliveries_f[deliveries_f["bowler"] == selected_bowler]
+        if "extras_type" in b_df.columns:
+            legal_del = b_df[~b_df["extras_type"].isin(["wides", "noballs"])]
+        else:
+            legal_del = b_df
+
+        runs_conceded = int(b_df["total_runs"].sum())
+        balls_bowled = int(legal_del.shape[0])
+        overs = balls_bowled / 6 if balls_bowled > 0 else 0
+        economy = round(runs_conceded / overs, 2) if overs > 0 else 0
+        wickets_taken = int(
+            wicket_df[wicket_df["bowler"] == selected_bowler].shape[0]
+        )
+
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("Wickets", wickets_taken)
+        c2.metric("Runs Conceded", runs_conceded)
+        c3.metric("Balls", balls_bowled)
+        c4.metric("Economy", economy)
+
+        if "season" in matches_f.columns:
+            bowl_season = deliveries_f.merge(
+                matches_f[["id", "season"]],
+                left_on="match_id",
+                right_on="id",
+                how="left"
+            )
+            bowl_season = bowl_season[
+                (bowl_season["bowler"] == selected_bowler) &
+                (bowl_season["is_wicket"] == 1) &
+                (~bowl_season["dismissal_kind"].isin(["run out", "retired hurt", "obstructing the field"]))
+            ]
+            bowl_season_grp = (
+                bowl_season.groupby("season")["is_wicket"]
+                .count()
+                .reset_index()
+                .rename(columns={"is_wicket": "season_wickets"})
+                .sort_values("season")
+            )
+
+            fig_season_wk = px.line(
+                bowl_season_grp,
+                x="season",
+                y="season_wickets",
+                markers=True,
+                title=f"Season-wise Wickets: {selected_bowler}",
+                labels={"season_wickets": "Wickets"}
+            )
+            st.plotly_chart(fig_season_wk, use_container_width=True)
     else:
-        st.error("Required bowling columns missing in deliveries data.")
+        st.write("Required columns for bowling analysis are missing in deliveries dataset.")
