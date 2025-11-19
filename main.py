@@ -46,8 +46,7 @@ teams = sorted(
     pd.unique(
         pd.concat(
             [
-                matches["team1"],
-                matches["team2"],
+                
                 matches["winner"]
             ],
             axis=0
