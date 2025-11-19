@@ -18,7 +18,7 @@ def load_data():
     matches = pd.read_csv("matches (2).csv")  # FIXED
     matches.columns = matches.columns.str.strip().str.lower().str.replace(" ", "_")
 
-    deliveries = pd.read_excel("deliveries_1.csv")
+    deliveries = pd.read_excel("deliveries_1.csv.xlsx")
     deliveries.columns = deliveries.columns.str.strip().str.lower().str.replace(" ", "_")
 
     return matches, deliveries
