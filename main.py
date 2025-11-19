@@ -22,26 +22,32 @@ st.set_page_config(
 # matches, deliveries = load_data()
 @st.cache_data
 def load_data():
-    matches = pd.read_csv("matches (2).csv", header=None)
-    
-    # If file has only one column, split it
+    # --- Load Matches File ---
+    try:
+        matches = pd.read_csv("matches (2).csv")
+    except:
+        matches = pd.read_csv("matches (2).csv", header=None)
+
+    # Fix: If only ONE column exists → it's a corrupted CSV, split it manually
     if matches.shape[1] == 1:
         matches = matches.iloc[:, 0].str.split(",", expand=True)
 
-    # Assign proper headers
+    # Now assign correct column names
     matches.columns = [
         "id","season","city","date","match_type","player_of_match","venue","team1","team2",
         "toss_winner","toss_decision","winner","result","result_margin","target_runs",
         "target_overs","super_over","method","umpire1","umpire2"
     ]
 
-    deliveries = pd.read_csv("deliveries.csv")
+    # Ensure columns clean
+    matches.columns = matches.columns.str.strip().str.lower()
 
-    # clean
-    matches.columns = matches.columns.str.lower()
-    deliveries.columns = deliveries.columns.str.lower()
+    # --- Deliveries File ---
+    deliveries = pd.read_csv("deliveries.csv")
+    deliveries.columns = deliveries.columns.str.strip().str.lower()
 
     return matches, deliveries
+
 
 
 if "date" in matches.columns:
